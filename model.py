@@ -4,6 +4,8 @@ from torch.nn import functional as F
 
 from torchvision.models import vgg16, vgg16_bn, vgg19, vgg19_bn
 
+from local_model_store import LocalModelStore
+
 
 def spectral_norm(module):
     nn.init.xavier_uniform_(module.weight, 2 ** 0.5)
@@ -25,8 +27,10 @@ def get_activation(name):
 
 
 class VGGFeature(nn.Module):
-    def __init__(self, arch, indices, use_fc=False, normalize=True, min_max=(-1, 1)):
+    def __init__(self, arch, indices, use_fc=False, normalize=True, min_max=(-1, 1), checkpoint=None):
         super().__init__()
+        model_store = LocalModelStore(arch, "blank", "blank")
+
 
         vgg = {
             'vgg16': vgg16,
@@ -34,6 +38,9 @@ class VGGFeature(nn.Module):
             'vgg19': vgg19,
             'vgg19_bn': vgg19_bn,
         }.get(arch)(pretrained=True)
+
+        if checkpoint != None:
+            model_store.load_model_and_optimizer_loc(vgg, model_location=checkpoint)
 
         for p in vgg.parameters():
             p.requires_grad = False
@@ -54,8 +61,8 @@ class VGGFeature(nn.Module):
             self.fc7 = vgg.classifier[3:6]
             self.fc8 = vgg.classifier[6]
 
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+        mean = torch.tensor([0, 0, 0]).view(1, 3, 1, 1)
+        std = torch.tensor([1, 1, 1]).view(1, 3, 1, 1)
 
         val_range = min_max[1] - min_max[0]
         mean = mean * (val_range) + min_max[0]

@@ -1,0 +1,15 @@
+certifi==2020.12.5
+mkl-fft==1.2.0
+mkl-random==1.1.1
+mkl-service==2.3.0
+numpy==1.19.4
+olefile==0.46
+opencv-python==4.4.0.46
+Pillow @ file:///C:/ci/pillow_1603823068645/work
+six @ file:///C:/ci/six_1605187374963/work
+torch==1.7.1
+torchaudio==0.7.2
+torchvision==0.8.2
+tqdm==4.54.1
+typing-extensions @ file:///tmp/build/80754af9/typing_extensions_1598376058250/work
+wincertstore==0.2

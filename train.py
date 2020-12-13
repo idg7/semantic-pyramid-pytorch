@@ -92,7 +92,7 @@ def train(args, dataset, gen, dis, g_ema, device):
         g_module = gen
         d_module = dis
 
-    vgg = VGGFeature("vgg16", [4, 9, 16, 23, 30], use_fc=True).eval().to(device)
+    vgg = VGGFeature("vgg16", [4, 9, 16, 23, 30], use_fc=True, checkpoint=args.checkpoint).eval().to(device)
     requires_grad(vgg, False)
 
     g_optim = optim.Adam(gen.parameters(), lr=1e-4, betas=(0, 0.999))
@@ -221,6 +221,7 @@ if __name__ == "__main__":
     parser.add_argument("--rec_weight", type=float, default=0.1)
     parser.add_argument("--div_weight", type=float, default=0.1)
     parser.add_argument("--crop_prob", type=float, default=0.3)
+    parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("path", metavar="PATH")
 
     args = parser.parse_args()

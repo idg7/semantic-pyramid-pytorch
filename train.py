@@ -6,6 +6,7 @@ from torch import optim, nn
 from torch.nn import functional as F
 from torch.utils import data
 from torchvision import transforms, utils
+from torchvision.datasets import ImageFolder
 from tqdm import tqdm
 
 from dataset import Places365
@@ -239,7 +240,7 @@ if __name__ == "__main__":
         ]
     )
 
-    dset = Places365(args.path, transform=transform)
+    dset = ImageFolder(args.path, transform=transform)
     args.n_class = dset.n_class
 
     if args.distributed:

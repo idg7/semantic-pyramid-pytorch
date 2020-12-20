@@ -21,49 +21,6 @@ def requires_grad(module, flag):
         m.requires_grad = flag
 
 
-def d_ls_loss(real_predict, fake_predict):
-    loss = (real_predict - 1).pow(2).mean() + fake_predict.pow(2).mean()
-
-    return loss
-
-
-def g_ls_loss(real_predict, fake_predict):
-    loss = (fake_predict - 1).pow(2).mean()
-
-    return loss
-
-
-def recon_loss(features_fake, features_real, masks):
-    r_loss = 0
-
-    for f_fake, f_real, m in zip(features_fake, features_real, masks):
-        if f_fake.ndim == 4:
-            f_fake = F.max_pool2d(f_fake, 2, ceil_mode=True)
-            f_real = F.max_pool2d(f_real, 2, ceil_mode=True)
-            f_mask = F.max_pool2d(m, 2, ceil_mode=True)
-
-            r_loss = (
-                r_loss + (F.l1_loss(f_fake, f_real, reduction="none") * f_mask).mean()
-            )
-
-        else:
-            r_loss = (
-                r_loss
-                + (F.l1_loss(f_fake, f_real, reduction="none") * m.squeeze(-1)).mean()
-            )
-
-    return r_loss
-
-
-def diversity_loss(z1, z2, fake1, fake2, eps=1e-8):
-    div_z = F.l1_loss(z1, z2, reduction="none").mean(1)
-    div_fake = F.l1_loss(fake1, fake2, reduction="none").mean((1, 2, 3))
-
-    d_loss = (div_z / (div_fake + eps)).mean()
-
-    return d_loss
-
-
 def accumulate(model1, model2, decay=0.999):
     par1 = dict(model1.named_parameters())
     par2 = dict(model2.named_parameters())
@@ -84,17 +41,54 @@ def sample_data(loader):
 
             yield next(loader_iter)
 
+def single_layers(n_layers):
+    return [[[i]] for i in range(n_layers)]
+
+def single_and_full(n_layers):
+    lst = [[[i]] for i in range(n_layers)]
+    lst.append([range(n_layers)])
+    return lst
 
 def all_layers_combo(n_layers):
     combos = []
-    for i in range(n_layers):
-        combos.append(itertools.combinations(range(n_layers), i))
+    for i in range(1, n_layers):
+        combos.append(sorted(itertools.combinations(range(n_layers), i)))
     return combos
+
+
+def all_layers(n_layers):
+    return [[range(n_layers)]]
+
+
+def my_make_mask_pyramid(selected, n_mask, sizes, device):
+    masks = []
+
+    for i in range(n_mask):
+        if i in selected:
+            if i < len(sizes):
+                m = torch.ones(*sizes[i], device=device)
+
+            else:
+                m = torch.ones(1, device=device)
+
+            masks.append(m)
+
+        else:
+            if i < len(sizes):
+                m = torch.zeros(*sizes[i], device=device)
+
+            else:
+                m = torch.zeros(1, device=device)
+
+            masks.append(m)
+
+    return masks
+
 
 def gen_masks(layer_combo, device):
     mask_batch = [];
     for i in layer_combo:
-        masks = make_mask_pyramid(i, 7, ((112, 112), (56, 56), (28, 28), (14, 14), (7, 7)), device)
+        masks = my_make_mask_pyramid(i, 7, ((112, 112), (56, 56), (28, 28), (14, 14), (7, 7)), device)
         mask_batch.append(masks)
 
     masks_zip = []
@@ -103,9 +97,7 @@ def gen_masks(layer_combo, device):
     return masks_zip
 
 
-
 def generate_multi_layers_sample(args, dataset, gen, dis, g_ema, device):
-
     vgg = VGGFeature("vgg16", [4, 9, 16, 23, 30], use_fc=True, checkpoint=args.checkpoint).eval().to(device)
     requires_grad(vgg, False)
 
@@ -132,7 +124,16 @@ def generate_multi_layers_sample(args, dataset, gen, dis, g_ema, device):
 
             real = real.to(device)
             class_id = class_id.to(device)
-            for layer_combo in all_layers_combo(7):
+            layer_combs = single_and_full(7)
+            os.makedirs(f"checkpoint_sample/{args.ckpt_iter}/{layer_combs}", exist_ok=True)
+            utils.save_image(
+                real,
+                f"checkpoint_sample/{args.ckpt_iter}/{layer_combs}/{str(i).zfill(6)}-real.png",
+                nrow=int(args.batch ** 0.5),
+                normalize=True,
+                range=(-1, 1),
+            )
+            for layer_combo in layer_combs:
 
                 features, fcs = vgg(real)
                 features = features + fcs[1:]
@@ -152,13 +153,15 @@ def generate_multi_layers_sample(args, dataset, gen, dis, g_ema, device):
                     pbar.set_description(
                         f"i"
                     )
+
                 utils.save_image(
                     fake1,
-                    f"sample/{str(i).zfill(6)}-{layer_combo}.png",
+                    f"checkpoint_sample/{args.ckpt_iter}/{layer_combs}/{str(i).zfill(6)}-{layer_combo}-fake.png",
                     nrow=int(args.batch ** 0.5),
                     normalize=True,
                     range=(-1, 1),
                 )
+
 
 
 
@@ -171,8 +174,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--local_rank", type=int, default=0)
-    parser.add_argument("--ckpt", type=str, default='checkpoint/070000.pt')
-    parser.add_argument("--iter", type=int, default=300)
+    parser.add_argument('--ckpt-iter', type=int, default=90000)
+    parser.add_argument("--ckpt", type=str, default='checkpoint/090000.pt')
+    parser.add_argument("--iter", type=int, default=50)
     parser.add_argument("--start_iter", type=int, default=0)
     parser.add_argument("--batch", type=int, default=32)
     parser.add_argument("--dim_z", type=int, default=128)

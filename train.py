@@ -32,23 +32,24 @@ def g_ls_loss(real_predict, fake_predict):
     return loss
 
 
-def recon_loss(features_fake, features_real, masks):
+def recon_loss(features_fake, features_real, masks, layers_lambdas):
     r_loss = 0
 
-    for f_fake, f_real, m in zip(features_fake, features_real, masks):
+    for i, (f_fake, f_real, m) in enumerate(*zip(features_fake, features_real, masks)):
+        layer_lambda = layers_lambdas[i]
         if f_fake.ndim == 4:
             f_fake = F.max_pool2d(f_fake, 2, ceil_mode=True)
             f_real = F.max_pool2d(f_real, 2, ceil_mode=True)
             f_mask = F.max_pool2d(m, 2, ceil_mode=True)
 
             r_loss = (
-                r_loss + (F.l1_loss(f_fake, f_real, reduction="none") * f_mask).mean()
+                r_loss + (F.l1_loss(f_fake, f_real, reduction="none") * f_mask).mean()*layer_lambda
             )
 
         else:
             r_loss = (
                 r_loss
-                + (F.l1_loss(f_fake, f_real, reduction="none") * m.squeeze(-1)).mean()
+                + (F.l1_loss(f_fake, f_real, reduction="none") * m.squeeze(-1)).mean()*layer_lambda
             )
 
     return r_loss
@@ -170,7 +171,7 @@ def train(args, dataset, gen, dis, g_ema, device):
         features_fake, fcs_fake = vgg(fake1)
         features_fake = features_fake + fcs_fake[1:]
 
-        r_loss = recon_loss(features_fake, features, masks)
+        r_loss = recon_loss(features_fake, features, masks, args.layers_lambdas)
         div_loss = diversity_loss(z1, z2, fake1, fake2, eps)
 
         g_loss = a_loss + args.rec_weight * r_loss + args.div_weight * div_loss
@@ -221,6 +222,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=32)
     parser.add_argument("--dim_z", type=int, default=128)
     parser.add_argument("--dim_class", type=int, default=128)
+    parser.add_argument("--layers_lambdas", type=list, default=[1,0.5,0.5,1,1,1,1])
     parser.add_argument("--rec_weight", type=float, default=0.1)
     parser.add_argument("--div_weight", type=float, default=0.1)
     parser.add_argument("--crop_prob", type=float, default=0.3)

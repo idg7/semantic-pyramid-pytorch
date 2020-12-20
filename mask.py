@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import torch
 from torch.nn import functional as F
+import time
 
 # Took from https://github.com/jshyunbin/inpainting_cGAN/blob/master/src/mask_generator.py
 def pattern_mask(img_size, kernel_size=7, num_points=1, ratio=0.25):
@@ -36,11 +37,13 @@ def pattern_mask(img_size, kernel_size=7, num_points=1, ratio=0.25):
 
 
 def make_crop_mask(crop_size, crop_kernel, sizes, device):
+
     crop_mask = (
         torch.from_numpy(pattern_mask(crop_size, crop_kernel))
         .view(1, 1, crop_size, crop_size)
-        .to(device)
+        .to(device, non_blocking=True)
     )
+
     masks = []
 
     for size in sizes:
@@ -81,6 +84,7 @@ def make_mask_pyramid(selected, n_mask, sizes, device):
 
 
 def make_crop_mask_pyramid(selected, n_mask, crop_size, crop_kernel, sizes, device):
+
     masks = make_crop_mask(crop_size, crop_kernel, sizes[:selected], device)
 
     masks.append(torch.ones(*sizes[selected], device=device))
@@ -106,7 +110,7 @@ def make_mask(
     selected = torch.randint(0, n_mask, (batch_size,))
 
     mask_batch = []
-
+    now = time.perf_counter()
     for sel in selected:
         if sel < len(sizes) and random.random() < crop_prob:
             masks = make_crop_mask_pyramid(
@@ -117,6 +121,8 @@ def make_mask(
             masks = make_mask_pyramid(sel, n_mask, sizes, device)
 
         mask_batch.append(masks)
+    later = time.perf_counter()
+    # print("mask time  ", later - now)
 
     masks_zip = []
 

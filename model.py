@@ -1,10 +1,11 @@
 import torch
 from torch import nn
-from torch.nn import functional as F
+from torch.nn import functional as F, DataParallel
 
 from torchvision.models import vgg16, vgg16_bn, vgg19, vgg19_bn
 
 from local_model_store import LocalModelStore
+from model_initializer import ModelInitializer
 
 
 def spectral_norm(module):
@@ -31,13 +32,15 @@ class VGGFeature(nn.Module):
         super().__init__()
         model_store = LocalModelStore(arch, "blank", "blank")
 
+        vgg = ModelInitializer(["VGG", "vgg11", "vgg11_bn", "vgg13", "vgg13_bn", "vgg16", "vgg16_bn",
+                                "vgg19_bn", "vgg19", "AlexNet", "alexnet"]).get_model(arch, False, 1000)
 
-        vgg = {
-            'vgg16': vgg16,
-            'vgg16_bn': vgg16_bn,
-            'vgg19': vgg19,
-            'vgg19_bn': vgg19_bn,
-        }.get(arch)(pretrained=True)
+        # vgg = {
+        #     'vgg16': vgg16,
+        #     'vgg16_bn': vgg16_bn,
+        #     'vgg19': vgg19,
+        #     'vgg19_bn': vgg19_bn,
+        # }.get(arch)(pretrained=True)
 
         if checkpoint != None:
             model_store.load_model_and_optimizer_loc(vgg, model_location=checkpoint)
@@ -50,19 +53,21 @@ class VGGFeature(nn.Module):
         for i, j in zip([-1] + indices, indices + [None]):
             if j is None:
                 break
-
-            self.slices.append(vgg.features[slice(i + 1, j + 1)])
+            if type(vgg.features) == DataParallel:
+                self.slices.append(vgg.features.module[slice(i + 1, j + 1)])
+            else:
+                self.slices.append(vgg.features[slice(i + 1, j + 1)])
 
         self.use_fc = use_fc
 
         if use_fc:
-            self.rest_layer = vgg.features[indices[-1] :]
+            self.rest_layer = vgg.features.module[indices[-1] :]
             self.fc6 = vgg.classifier[:3]
             self.fc7 = vgg.classifier[3:6]
             self.fc8 = vgg.classifier[6]
 
-        mean = torch.tensor([0, 0, 0]).view(1, 3, 1, 1)
-        std = torch.tensor([1, 1, 1]).view(1, 3, 1, 1)
+        mean = torch.tensor([0.5, 0.5, 0.5]).view(1, 3, 1, 1)
+        std = torch.tensor([0.5, 0.5, 0.5]).view(1, 3, 1, 1)
 
         val_range = min_max[1] - min_max[0]
         mean = mean * (val_range) + min_max[0]

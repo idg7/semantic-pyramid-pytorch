@@ -105,6 +105,7 @@ def train(args, dataset, gen, dis, g_ema, device):
         num_workers=4,
         sampler=dist.data_sampler(dataset, shuffle=True, distributed=args.distributed),
         drop_last=True,
+        pin_memory=True
     )
 
     loader_iter = sample_data(loader)
@@ -118,11 +119,11 @@ def train(args, dataset, gen, dis, g_ema, device):
 
     for i in pbar:
         real, class_id = next(loader_iter)
-
-        real = real.to(device)
-        class_id = class_id.to(device)
-
+        real = real.to(device, non_blocking=True)
+        class_id = class_id.to(device, non_blocking=True)
+        # print("before first")
         masks = make_mask(real.shape[0], device, args.crop_prob)
+        # print("after first")
         features, fcs = vgg(real)
         features = features + fcs[1:]
 
@@ -148,8 +149,9 @@ def train(args, dataset, gen, dis, g_ema, device):
 
         requires_grad(gen, True)
         requires_grad(dis, False)
-
+        # print("before second")
         masks = make_mask(real.shape[0], device, args.crop_prob)
+        # print("after second")
 
         if args.distributed:
             gen.broadcast_buffers = True
@@ -181,7 +183,7 @@ def train(args, dataset, gen, dis, g_ema, device):
 
         if dist.get_rank() == 0:
             pbar.set_description(
-                f"d: {d_loss.item():.4f}; g: {a_loss.item():.4f}; rec: {r_loss.item():.4f}; div: {div_loss.item():.4f}"
+                f"d: {d_loss.detach().item():.4f}; g: {a_loss.detach().item():.4f}; rec: {r_loss.detach().item():.4f}; div: {div_loss.detach().item():.4f}"
             )
 
             if i % 100 == 0:
@@ -213,17 +215,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--local_rank", type=int, default=0)
-    parser.add_argument("--ckpt", type=str, default=None)
+    parser.add_argument("--ckpt", type=str, default='checkpoint/050000.pt')
     parser.add_argument("--iter", type=int, default=500000)
-    parser.add_argument("--start_iter", type=int, default=0)
+    parser.add_argument("--start_iter", type=int, default=50000)
     parser.add_argument("--batch", type=int, default=32)
     parser.add_argument("--dim_z", type=int, default=128)
     parser.add_argument("--dim_class", type=int, default=128)
     parser.add_argument("--rec_weight", type=float, default=0.1)
     parser.add_argument("--div_weight", type=float, default=0.1)
     parser.add_argument("--crop_prob", type=float, default=0.3)
-    parser.add_argument("--checkpoint", type=str, default=None)
-    parser.add_argument("path", metavar="PATH")
+    parser.add_argument("--checkpoint", type=str, default='/home/administrator/experiments/high_importance_features_full_dataset/vgg16/models/120.pth')
+    parser.add_argument("--path", type=str, default='/home/administrator/datasets/images_faces/faces_only_300/train')
 
     args = parser.parse_args()
 
@@ -241,7 +243,7 @@ if __name__ == "__main__":
     )
 
     dset = ImageFolder(args.path, transform=transform)
-    args.n_class = dset.n_class
+    args.n_class = 1000
 
     if args.distributed:
         torch.cuda.set_device(args.local_rank)

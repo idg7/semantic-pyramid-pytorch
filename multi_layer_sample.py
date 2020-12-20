@@ -171,7 +171,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--local_rank", type=int, default=0)
-    parser.add_argument("--ckpt", type=str, default='checkpoint/050000.pt')
+    parser.add_argument("--ckpt", type=str, default='checkpoint/070000.pt')
     parser.add_argument("--iter", type=int, default=300)
     parser.add_argument("--start_iter", type=int, default=0)
     parser.add_argument("--batch", type=int, default=32)
